@@ -1,0 +1,90 @@
+---
+title: "131_HW2"
+author: "Zack Reardon"
+date: "10/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache.extra = rand_seed)
+```
+
+```{r}
+library(tidyverse)
+library(tidymodels)
+abalone_data <- read_csv("/Users/zackreardon/Downloads/homework-2/data/abalone.csv")
+```
+
+Question 1.
+
+```{r}
+abalone <- abalone_data %>%
+  mutate(age = rings+1.5)
+ggplot(abalone, aes(x=age)) + geom_histogram()
+```
+
+The new variable age appears to be Poisson distributed with a mean age of 10 or 11.
+
+Question 2.
+
+```{r}
+set.seed(100)
+
+abalone_split <- initial_split(abalone, prop= 0.80, strata = age)
+
+abalone_train <- training(abalone_split)
+abalone_test <- testing(abalone_split)
+```
+
+Question 3.
+
+Rings shouldn't be used to predict age since it is inherently correlated to age by design.
+```{r}
+abalone_recipe <- recipe(age ~ type + longest_shell + diameter + height + whole_weight + shucked_weight + viscera_weight + shell_weight, data = abalone_train) %>%
+  step_dummy(type) %>%
+  step_interact(~ starts_with("type"):shucked_weight) %>%
+  step_interact(~ longest_shell:diameter) %>%
+  step_interact(~ shucked_weight:shell_weight) %>%
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors())
+```
+
+Question 4.
+
+```{r}
+lm_model <- linear_reg() %>%
+  set_engine("lm")
+```
+
+Question 5.
+
+```{r}
+lm_wflow <- workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(abalone_recipe)
+
+lm_fit <- fit(lm_wflow, abalone_train)
+```
+
+Question 6.
+
+```{r}
+newdata <- data.frame(type = "F", longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1)
+predict(lm_fit, newdata)
+```
+
+Question 7.
+
+```{r}
+library(yardstick)
+
+abalone_metrics <- metric_set(rsq, rmse, mae)
+abalone_train_res <- predict(lm_fit, new_data = abalone_train %>% select(-age))
+abalone_train_res <- bind_cols(abalone_train_res, abalone_train %>% select(age))
+abalone_metrics(abalone_train_res, truth = age, 
+                estimate = .pred)
+```
+
+The model has a low ${R^2}$ value of 0.554 meaning that 55.4% of the variation of the response is attributed to the predictors using this model.
